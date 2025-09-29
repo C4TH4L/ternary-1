@@ -50,7 +50,7 @@ function barycentricCoordinates(px, py, A, B, C){
 }
 
 function sendResponse(plotId, response){
-    const url = 'https://script.google.com/macros/s/AKfycbxYKN8B9yIpMIkiV6zrJ_8jGDUz2m1fbaTS6hsU4zqQtnlqQNYLihNdMQt02XfOSb53/exec'; // <-- replace with your Apps Script URL
+    const url = 'https://script.google.com/macros/s/AKfycbyfO5x1rNsoEje-99SjESORkz6MHcICfimjBr80QSXqc1_OkBEILihhVb-Dn5_zqhLp/exec'; // <-- replace with your Apps Script URL
     fetch(url, {
         method:'POST',
         headers:{'Content-Type':'application/json'},
@@ -137,6 +137,7 @@ plots.forEach(p => drawPlot(p.id, p.storage));
 </html>
 
    
+
 
 
 
