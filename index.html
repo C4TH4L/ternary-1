@@ -1,121 +1,143 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Ternary Plot Survey — Accurate Mapping</title>
-<script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ternary Plot Survey</title>
+<script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
   body { font-family: Arial, sans-serif; margin: 20px; }
-  h1 { text-align: center; margin-bottom: 20px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-  .card { padding: 12px; border: 1px solid #ddd; border-radius: 10px; }
-  .plot-title { font-weight: 600; text-align: center; margin-bottom: 8px; }
-  .plot-wrap { height: 520px; }
-  @media (max-width:900px){ .grid{grid-template-columns:1fr} }
+  h1 { text-align: center; margin-bottom: 30px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .card { border: 1px solid #ccc; border-radius: 10px; padding: 10px; }
+  .plot-title { font-weight: bold; text-align: center; margin-bottom: 10px; }
+  svg { width: 100%; height: 500px; cursor: crosshair; }
 </style>
 </head>
 <body>
-  <h1>Ternary Plot Survey</h1>
-  <div class="grid">
-    <div class="card">
-      <div class="plot-title">Where do you think peoples values currently lie</div>
-      <div id="plot-today" class="plot-wrap"></div>
-    </div>
-    <div class="card">
-      <div class="plot-title">Where do you think peoples values in 2075 will lie</div>
-      <div id="plot-2075" class="plot-wrap"></div>
-    </div>
+
+<h1>Ternary Plot Survey</h1>
+
+<div class="grid">
+  <div class="card">
+    <div class="plot-title">Where do you think peoples values currently lie</div>
+    <svg id="plot-today"></svg>
   </div>
+  <div class="card">
+    <div class="plot-title">Where do you think peoples values in 2075 will lie</div>
+    <svg id="plot-2075"></svg>
+  </div>
+</div>
 
 <script>
-// ---------- utilities ----------
-function makeTrace(points, name, color='red', showLegend=false){
-  // points: array of [a,b,c]
-  return {
-    type: 'scatterternary',
-    a: points.map(p => p[0]),
-    b: points.map(p => p[1]),
-    c: points.map(p => p[2]),
-    text: points.map(p => `Social: ${p[0].toFixed(1)}%<br>Physical: ${p[1].toFixed(1)}%<br>Environmental: ${p[2].toFixed(1)}%`),
-    mode: 'markers',
-    marker: { size: 10, color: color },
-    name: name,
-    showlegend: showLegend,
-    hoverinfo: 'text'
-  };
+
+// ---- Configuration ----
+const plots = [
+  {id:'plot-today', storage:'responseToday'},
+  {id:'plot-2075', storage:'responseFuture'}
+];
+
+const margin = {top:40,right:40,bottom:40,left:40};
+
+// ---- Helper functions ----
+function barycentricCoordinates(px, py, A, B, C){
+    // Compute barycentric coords (alpha, beta, gamma) for point px,py
+    const det = (B[1]-C[1])*(A[0]-C[0]) + (C[0]-B[0])*(A[1]-C[1]);
+    let alpha = ((B[1]-C[1])*(px-C[0]) + (C[0]-B[0])*(py-C[1])) / det;
+    let beta  = ((C[1]-A[1])*(px-C[0]) + (A[0]-C[0])*(py-C[1])) / det;
+    let gamma = 1 - alpha - beta;
+    // Clamp negatives
+    alpha = Math.max(0, alpha);
+    beta = Math.max(0, beta);
+    gamma = Math.max(0, gamma);
+    const sum = alpha+beta+gamma;
+    return [alpha/sum*100, beta/sum*100, gamma/sum*100];
 }
 
-const layout = {
-  ternary: {
-    sum: 100,
-    aaxis: { title: 'Social' },
-    baxis: { title: 'Physical' },
-    caxis: { title: 'Environmental' }
-  },
-  margin: { l: 40, r: 40, t: 40, b: 40 },
-  // keep responsive
-  autosize: true
-};
-
-function sendResponse(plotId, response) {
-  const url = 'https://script.google.com/macros/s/AKfycbwQKs6qYO_OD-rMhZZljH-C2hXnn5eAf9Bku7B2sjR5vkJKJCF_E6jjDFFgbv8GDzuo/exec'; // <<-- replace this with your Apps Script Web App URL
-  const payload = { plot: plotId, response: response };
-  fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
-  })
-  .then(r => r.text())
-  .then(txt => console.log('Sent:', txt))
-  .catch(err => console.error('Send error:', err));
+function sendResponse(plotId, response){
+    const url = 'YOUR_WEB_APP_URL'; // <-- replace with your Apps Script URL
+    fetch(url, {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({plot: plotId, response: response})
+    }).then(r=>r.text()).then(t=>console.log('Response sent', t))
+    .catch(err=>console.error(err));
 }
 
-// ---------- Accurate barycentric mapping ----------
-function computeTrianglePixels(plotDiv) {
-  // Use Plotly's full layout to determine the exact pixel rectangle (domain) used by the ternary axes,
-  // then return page-coordinates of the triangle vertices A (Social BL), B (Physical BR), C (Environmental top)
-  const full = plotDiv._fullLayout;
-  if (!full) return null;
+// ---- Draw a single ternary plot ----
+function drawPlot(plotId, storageKey){
+    const svg = d3.select(`#${plotId}`);
+    const width = svg.node().clientWidth - margin.left - margin.right;
+    const height = svg.node().clientHeight - margin.top - margin.bottom;
 
-  const rect = plotDiv.getBoundingClientRect();
+    const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-  const margin = full.margin || {l:0,r:0,t:0,b:0};
-  const fullW = full.width || rect.width;
-  const fullH = full.height || rect.height;
+    // Equilateral triangle vertices
+    const A = [0, height];
+    const B = [width, height];
+    const C = [width/2, 0];
 
-  const innerLeft = margin.l;
-  const innerTop = margin.t;
-  const innerW = fullW - (margin.l + margin.r);
-  const innerH = fullH - (margin.t + margin.b);
+    // Draw triangle
+    g.append("polygon")
+      .attr("points", [A,B,C].map(d=>d.join(',')).join(' '))
+      .attr("fill","none")
+      .attr("stroke","#333")
+      .attr("stroke-width",2);
 
-  const domain = (full.ternary && full.ternary.domain) || { x: [0,1], y: [0,1] };
-  // domain.x/y are fractions of the inner plotting area; domain.y is bottom->top fraction
+    // Axis labels
+    g.append("text").text("Social").attr("x",A[0]-10).attr("y",A[1]+15).attr("text-anchor","end");
+    g.append("text").text("Physical").attr("x",B[0]+10).attr("y",B[1]+15).attr("text-anchor","start");
+    g.append("text").text("Environmental").attr("x",C[0]).attr("y",C[1]-10).attr("text-anchor","middle");
 
-  const x0_rel = innerLeft + domain.x[0] * innerW;
-  const x1_rel = innerLeft + domain.x[1] * innerW;
+    // Hover & response circles
+    const hoverCircle = g.append("circle").attr("r",7).attr("fill","blue").attr("opacity",0.6).style("pointer-events","none");
+    let responseCircle = null;
 
-  // For y, convert domain (fractions bottom->top) to pixel offset from top of full plot
-  const yTop_rel    = innerTop + (1 - domain.y[1]) * innerH;
-  const yBottom_rel = innerTop + (1 - domain.y[0]) * innerH;
+    const stored = JSON.parse(localStorage.getItem(storageKey)||'null');
+    if(stored){
+        responseCircle = g.append("circle")
+                          .attr("r",7).attr("fill","red")
+                          .attr("cx",A[0]*stored[0]/100 + B[0]*stored[1]/100 + C[0]*stored[2]/100)
+                          .attr("cy",A[1]*stored[0]/100 + B[1]*stored[1]/100 + C[1]*stored[2]/100);
+    }
 
-  // Convert to page coordinates by adding rect.left/top
-  const Ax = rect.left + x0_rel;
-  const Ay = rect.top  + yBottom_rel; // bottom-left
-  const Bx = rect.left + x1_rel;
-  const By = rect.top  + yBottom_rel; // bottom-right
-  const Cx = rect.left + (x0_rel + x1_rel) / 2;
-  const Cy = rect.top  + yTop_rel;    // top center
+    let submitted = !!stored;
 
-  return { Ax, Ay, Bx, By, Cx, Cy };
+    svg.on("mousemove", function(event){
+        if(submitted) return;
+        const [mx,my] = d3.pointer(event);
+        const coords = barycentricCoordinates(mx-margin.left, my-margin.top, A,B,C);
+        const cx = A[0]*coords[0]/100 + B[0]*coords[1]/100 + C[0]*coords[2]/100;
+        const cy = A[1]*coords[0]/100 + B[1]*coords[1]/100 + C[1]*coords[2]/100;
+        hoverCircle.attr("cx",cx).attr("cy",cy).attr("opacity",0.6);
+    });
+
+    svg.on("mouseleave", function(){ hoverCircle.attr("opacity",0); });
+
+    svg.on("click", function(event){
+        if(submitted) return;
+        const [mx,my] = d3.pointer(event);
+        const coords = barycentricCoordinates(mx-margin.left, my-margin.top, A,B,C);
+        const cx = A[0]*coords[0]/100 + B[0]*coords[1]/100 + C[0]*coords[2]/100;
+        const cy = A[1]*coords[0]/100 + B[1]*coords[1]/100 + C[1]*coords[2]/100;
+
+        responseCircle = g.append("circle").attr("r",7).attr("fill","red").attr("cx",cx).attr("cy",cy);
+        localStorage.setItem(storageKey, JSON.stringify(coords));
+        sendResponse(plotId, coords);
+        alert(`Recorded:\nSocial: ${coords[0].toFixed(1)}%\nPhysical: ${coords[1].toFixed(1)}%\nEnvironmental: ${coords[2].toFixed(1)}%`);
+        submitted = true;
+        hoverCircle.attr("opacity",0);
+    });
 }
 
-function pointToBarycentric(pageX, pageY, tri) {
-  // returns [alpha, beta, gamma] where alpha=Social (A), beta=Physical (B), gamma=Environmental (C)
-  const {Ax,Ay,Bx,By,Cx,Cy} = tri;
-  const denom = ((By - Cy)*(Ax - Cx) + (Cx - Bx)*(Ay - Cy));
-  if (Math.abs(denom) < 1e-9) return [0,0,0];
-  const alpha = ((By - Cy)*(pag*
+// ---- Initialize both plots ----
+plots.forEach(p => drawPlot(p.id, p.storage));
+
+</script>
+</body>
+</html>
+
+
 
 
 
