@@ -1,150 +1,123 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Ternary Plot Survey</title>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Ternary Plot Survey — Accurate Mapping</title>
 <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
 <style>
   body { font-family: Arial, sans-serif; margin: 20px; }
-  h1 { text-align: center; margin-bottom: 30px; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  .card { padding: 10px; border: 1px solid #ccc; border-radius: 10px; }
-  .plot-title { font-weight: bold; text-align: center; margin-bottom: 10px; }
-  .plot-wrap { height: 500px; }
+  h1 { text-align: center; margin-bottom: 20px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .card { padding: 12px; border: 1px solid #ddd; border-radius: 10px; }
+  .plot-title { font-weight: 600; text-align: center; margin-bottom: 8px; }
+  .plot-wrap { height: 520px; }
+  @media (max-width:900px){ .grid{grid-template-columns:1fr} }
 </style>
 </head>
 <body>
-<h1>Ternary Plot Survey</h1>
-
-<div class="grid">
-  <div class="card">
-    <div class="plot-title">Where do you think peoples values currently lie</div>
-    <div id="plot-today" class="plot-wrap"></div>
+  <h1>Ternary Plot Survey</h1>
+  <div class="grid">
+    <div class="card">
+      <div class="plot-title">Where do you think peoples values currently lie</div>
+      <div id="plot-today" class="plot-wrap"></div>
+    </div>
+    <div class="card">
+      <div class="plot-title">Where do you think peoples values in 2075 will lie</div>
+      <div id="plot-2075" class="plot-wrap"></div>
+    </div>
   </div>
-  <div class="card">
-    <div class="plot-title">Where do you think peoples values in 2075 will lie</div>
-    <div id="plot-2075" class="plot-wrap"></div>
-  </div>
-</div>
 
 <script>
-// ---- Helper to create a point trace ----
+// ---------- utilities ----------
 function makeTrace(points, name, color='red', showLegend=false){
+  // points: array of [a,b,c]
   return {
-    type:'scatterternary',
-    a: points.map(p=>p[0]),
-    b: points.map(p=>p[1]),
-    c: points.map(p=>p[2]),
-    text: points.map(
-      p => `Social: ${p[0].toFixed(1)}%<br>Physical: ${p[1].toFixed(1)}%<br>Environmental: ${p[2].toFixed(1)}%`
-    ),
-    mode:'markers',
-    marker:{size:10,color:color},
+    type: 'scatterternary',
+    a: points.map(p => p[0]),
+    b: points.map(p => p[1]),
+    c: points.map(p => p[2]),
+    text: points.map(p => `Social: ${p[0].toFixed(1)}%<br>Physical: ${p[1].toFixed(1)}%<br>Environmental: ${p[2].toFixed(1)}%`),
+    mode: 'markers',
+    marker: { size: 10, color: color },
     name: name,
     showlegend: showLegend,
-    hoverinfo:'text'
+    hoverinfo: 'text'
   };
 }
 
-// ---- Layout ----
 const layout = {
-  ternary:{
-    sum:100,
-    aaxis:{title:'Social'},
-    baxis:{title:'Physical'},
-    caxis:{title:'Environmental'}
+  ternary: {
+    sum: 100,
+    aaxis: { title: 'Social' },
+    baxis: { title: 'Physical' },
+    caxis: { title: 'Environmental' }
   },
-  margin:{l:40,r:40,t:40,b:40}
+  margin: { l: 40, r: 40, t: 40, b: 40 },
+  // keep responsive
+  autosize: true
 };
 
-// ---- Send response to Google Sheets ----
 function sendResponse(plotId, response) {
-  const url = 'YOUR_WEB_APP_URL'; // <-- Replace with your Google Apps Script Web App URL
-  const data = { plot: plotId, response: response };
+  const url = 'https://script.google.com/macros/s/AKfycbwQKs6qYO_OD-rMhZZljH-C2hXnn5eAf9Bku7B2sjR5vkJKJCF_E6jjDFFgbv8GDzuo/exec'; // <<-- replace this with your Apps Script Web App URL
+  const payload = { plot: plotId, response: response };
   fetch(url, {
     method: 'POST',
-    headers:{ 'Content-Type':'application/json' },
-    body: JSON.stringify(data)
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
   })
-  .then(res => res.text())
-  .then(res => console.log('Response recorded:', res))
-  .catch(err => console.error('Error sending response:', err));
+  .then(r => r.text())
+  .then(txt => console.log('Sent:', txt))
+  .catch(err => console.error('Send error:', err));
 }
 
-// ---- Convert click position to ternary coordinates (exact barycentric) ----
-function getTernaryFromClick(event, plotId) {
-  const plot = document.getElementById(plotId);
-  const rect = plot.getBoundingClientRect();
+// ---------- Accurate barycentric mapping ----------
+function computeTrianglePixels(plotDiv) {
+  // Use Plotly's full layout to determine the exact pixel rectangle (domain) used by the ternary axes,
+  // then return page-coordinates of the triangle vertices A (Social BL), B (Physical BR), C (Environmental top)
+  const full = plotDiv._fullLayout;
+  if (!full) return null;
 
-  const x = event.clientX - rect.left;
-  const y = event.clientY - rect.top;
-  const w = rect.width;
-  const h = rect.height;
+  const rect = plotDiv.getBoundingClientRect();
 
-  // Triangle vertices
-  const Ax = w * 0.1, Ay = h * 0.9;   // Social
-  const Bx = w * 0.9, By = h * 0.9;   // Physical
-  const Cx = w * 0.5, Cy = h * 0.1;   // Environmental
+  const margin = full.margin || {l:0,r:0,t:0,b:0};
+  const fullW = full.width || rect.width;
+  const fullH = full.height || rect.height;
 
-  // Barycentric math
+  const innerLeft = margin.l;
+  const innerTop = margin.t;
+  const innerW = fullW - (margin.l + margin.r);
+  const innerH = fullH - (margin.t + margin.b);
+
+  const domain = (full.ternary && full.ternary.domain) || { x: [0,1], y: [0,1] };
+  // domain.x/y are fractions of the inner plotting area; domain.y is bottom->top fraction
+
+  const x0_rel = innerLeft + domain.x[0] * innerW;
+  const x1_rel = innerLeft + domain.x[1] * innerW;
+
+  // For y, convert domain (fractions bottom->top) to pixel offset from top of full plot
+  const yTop_rel    = innerTop + (1 - domain.y[1]) * innerH;
+  const yBottom_rel = innerTop + (1 - domain.y[0]) * innerH;
+
+  // Convert to page coordinates by adding rect.left/top
+  const Ax = rect.left + x0_rel;
+  const Ay = rect.top  + yBottom_rel; // bottom-left
+  const Bx = rect.left + x1_rel;
+  const By = rect.top  + yBottom_rel; // bottom-right
+  const Cx = rect.left + (x0_rel + x1_rel) / 2;
+  const Cy = rect.top  + yTop_rel;    // top center
+
+  return { Ax, Ay, Bx, By, Cx, Cy };
+}
+
+function pointToBarycentric(pageX, pageY, tri) {
+  // returns [alpha, beta, gamma] where alpha=Social (A), beta=Physical (B), gamma=Environmental (C)
+  const {Ax,Ay,Bx,By,Cx,Cy} = tri;
   const denom = ((By - Cy)*(Ax - Cx) + (Cx - Bx)*(Ay - Cy));
-  const alpha = ((By - Cy)*(x - Cx) + (Cx - Bx)*(y - Cy)) / denom;
-  const beta  = ((Cy - Ay)*(x - Cx) + (Ax - Cx)*(y - Cy)) / denom;
-  const gamma = 1 - alpha - beta;
+  if (Math.abs(denom) < 1e-9) return [0,0,0];
+  const alpha = ((By - Cy)*(pag*
 
-  return [alpha*100, beta*100, gamma*100];
-}
 
-// ---- Render a blank plot, allow one response ----
-function renderPlot(plotId, storageKey){
-  let traces = [makeTrace([], 'Your Response', 'red')];
-
-  const userPoint = JSON.parse(localStorage.getItem(storageKey) || 'null');
-  if (userPoint) {
-    traces = [makeTrace([userPoint],'Your Response','red')];
-  }
-
-  // Add an invisible hover marker
-  traces.push(makeTrace([], 'Hover', 'blue'));
-
-  Plotly.newPlot(plotId, traces, layout);
-
-  let submitted = !!userPoint;
-  const plotEl = document.getElementById(plotId);
-
-  // Hover preview
-  plotEl.addEventListener('mousemove', function(ev){
-    if (submitted) return;
-    const point = getTernaryFromClick(ev, plotId);
-    Plotly.restyle(plotId, {
-      a: [[point[0]]],
-      b: [[point[1]]],
-      c: [[point[2]]],
-      text: [[`Social: ${point[0].toFixed(1)}%<br>Physical: ${point[1].toFixed(1)}%<br>Environmental: ${point[2].toFixed(1)}%`]]
-    }, [1]); // update trace index 1 (hover)
-  });
-
-  // Click to submit
-  plotEl.addEventListener('click', function(ev){
-    if (submitted) return;
-    const point = getTernaryFromClick(ev, plotId);
-    Plotly.addTraces(plotId, makeTrace([point],'Your Response','red'));
-    localStorage.setItem(storageKey, JSON.stringify(point));
-    sendResponse(plotId, point);
-    alert(`Your response has been recorded!\n\nSocial: ${point[0].toFixed(1)}%\nPhysical: ${point[1].toFixed(1)}%\nEnvironmental: ${point[2].toFixed(1)}%`);
-    submitted = true;
-    // Remove hover marker after submission
-    Plotly.deleteTraces(plotId, 1);
-  });
-}
-
-// ---- Render both plots ----
-renderPlot('plot-today', 'responseToday');
-renderPlot('plot-2075', 'responseFuture');
-</script>
-</body>
-</html>
 
 
 
