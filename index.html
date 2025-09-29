@@ -30,15 +30,20 @@
 
 <script>
 // ---- Helper to create a point trace ----
-function makeTrace(points, name, color='red'){
+function makeTrace(points, name, color='red', showLegend=false){
   return {
     type:'scatterternary',
     a: points.map(p=>p[0]),
     b: points.map(p=>p[1]),
     c: points.map(p=>p[2]),
+    text: points.map(
+      p => `Social: ${p[0].toFixed(1)}%<br>Physical: ${p[1].toFixed(1)}%<br>Environmental: ${p[2].toFixed(1)}%`
+    ),
     mode:'markers',
     marker:{size:10,color:color},
-    name: name
+    name: name,
+    showlegend: showLegend,
+    hoverinfo:'text'
   };
 }
 
@@ -72,7 +77,6 @@ function getTernaryFromClick(event, plotId) {
   const plot = document.getElementById(plotId);
   const rect = plot.getBoundingClientRect();
 
-  // Click position
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
   const w = rect.width;
@@ -101,11 +105,27 @@ function renderPlot(plotId, storageKey){
     traces = [makeTrace([userPoint],'Your Response','red')];
   }
 
+  // Add an invisible hover marker
+  traces.push(makeTrace([], 'Hover', 'blue'));
+
   Plotly.newPlot(plotId, traces, layout);
 
   let submitted = !!userPoint;
   const plotEl = document.getElementById(plotId);
 
+  // Hover preview
+  plotEl.addEventListener('mousemove', function(ev){
+    if (submitted) return;
+    const point = getTernaryFromClick(ev, plotId);
+    Plotly.restyle(plotId, {
+      a: [[point[0]]],
+      b: [[point[1]]],
+      c: [[point[2]]],
+      text: [[`Social: ${point[0].toFixed(1)}%<br>Physical: ${point[1].toFixed(1)}%<br>Environmental: ${point[2].toFixed(1)}%`]]
+    }, [1]); // update trace index 1 (hover)
+  });
+
+  // Click to submit
   plotEl.addEventListener('click', function(ev){
     if (submitted) return;
     const point = getTernaryFromClick(ev, plotId);
@@ -114,6 +134,8 @@ function renderPlot(plotId, storageKey){
     sendResponse(plotId, point);
     alert(`Your response has been recorded!\n\nSocial: ${point[0].toFixed(1)}%\nPhysical: ${point[1].toFixed(1)}%\nEnvironmental: ${point[2].toFixed(1)}%`);
     submitted = true;
+    // Remove hover marker after submission
+    Plotly.deleteTraces(plotId, 1);
   });
 }
 
@@ -123,6 +145,8 @@ renderPlot('plot-2075', 'responseFuture');
 </script>
 </body>
 </html>
+
+
 
 
 
