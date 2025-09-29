@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+    <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ternary Plot Survey</title>
+<title>Ternary Plot Survey with Hover Labels</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
   body { font-family: Arial, sans-serif; margin: 20px; }
@@ -12,6 +12,7 @@
   .card { border: 1px solid #ccc; border-radius: 10px; padding: 10px; }
   .plot-title { font-weight: bold; text-align: center; margin-bottom: 10px; }
   svg { width: 100%; height: 500px; cursor: crosshair; }
+  .hover-label { font-size: 12px; font-weight: bold; pointer-events: none; background-color: rgba(255,255,255,0.8); }
 </style>
 </head>
 <body>
@@ -30,26 +31,20 @@
 </div>
 
 <script>
-
 // ---- Configuration ----
 const plots = [
   {id:'plot-today', storage:'responseToday'},
   {id:'plot-2075', storage:'responseFuture'}
 ];
-
 const margin = {top:40,right:40,bottom:40,left:40};
 
-// ---- Helper functions ----
+// ---- Helper Functions ----
 function barycentricCoordinates(px, py, A, B, C){
-    // Compute barycentric coords (alpha, beta, gamma) for point px,py
     const det = (B[1]-C[1])*(A[0]-C[0]) + (C[0]-B[0])*(A[1]-C[1]);
     let alpha = ((B[1]-C[1])*(px-C[0]) + (C[0]-B[0])*(py-C[1])) / det;
     let beta  = ((C[1]-A[1])*(px-C[0]) + (A[0]-C[0])*(py-C[1])) / det;
     let gamma = 1 - alpha - beta;
-    // Clamp negatives
-    alpha = Math.max(0, alpha);
-    beta = Math.max(0, beta);
-    gamma = Math.max(0, gamma);
+    alpha = Math.max(0, alpha); beta = Math.max(0, beta); gamma = Math.max(0, gamma);
     const sum = alpha+beta+gamma;
     return [alpha/sum*100, beta/sum*100, gamma/sum*100];
 }
@@ -91,6 +86,7 @@ function drawPlot(plotId, storageKey){
 
     // Hover & response circles
     const hoverCircle = g.append("circle").attr("r",7).attr("fill","blue").attr("opacity",0.6).style("pointer-events","none");
+    const hoverLabel = g.append("text").attr("class","hover-label").attr("x",0).attr("y",0).attr("opacity",0);
     let responseCircle = null;
 
     const stored = JSON.parse(localStorage.getItem(storageKey)||'null');
@@ -110,9 +106,12 @@ function drawPlot(plotId, storageKey){
         const cx = A[0]*coords[0]/100 + B[0]*coords[1]/100 + C[0]*coords[2]/100;
         const cy = A[1]*coords[0]/100 + B[1]*coords[1]/100 + C[1]*coords[2]/100;
         hoverCircle.attr("cx",cx).attr("cy",cy).attr("opacity",0.6);
+        hoverLabel.attr("x",cx+10).attr("y",cy-10)
+                  .text(`S:${coords[0].toFixed(1)} P:${coords[1].toFixed(1)} E:${coords[2].toFixed(1)}`)
+                  .attr("opacity",1);
     });
 
-    svg.on("mouseleave", function(){ hoverCircle.attr("opacity",0); });
+    svg.on("mouseleave", function(){ hoverCircle.attr("opacity",0); hoverLabel.attr("opacity",0); });
 
     svg.on("click", function(event){
         if(submitted) return;
@@ -126,16 +125,19 @@ function drawPlot(plotId, storageKey){
         sendResponse(plotId, coords);
         alert(`Recorded:\nSocial: ${coords[0].toFixed(1)}%\nPhysical: ${coords[1].toFixed(1)}%\nEnvironmental: ${coords[2].toFixed(1)}%`);
         submitted = true;
-        hoverCircle.attr("opacity",0);
+        hoverCircle.attr("opacity",0); hoverLabel.attr("opacity",0);
     });
 }
 
 // ---- Initialize both plots ----
 plots.forEach(p => drawPlot(p.id, p.storage));
-
 </script>
+
 </body>
 </html>
+
+   
+
 
 
 
