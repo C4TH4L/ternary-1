@@ -44,13 +44,18 @@ function makeTrace(points, name, color='red'){
 
 // ---- Layout ----
 const layout = {
-  ternary:{sum:100, aaxis:{title:'Social'}, baxis:{title:'Physical'}, caxis:{title:'Environmental'}},
+  ternary:{
+    sum:100,
+    aaxis:{title:'Social'},
+    baxis:{title:'Physical'},
+    caxis:{title:'Environmental'}
+  },
   margin:{l:40,r:40,t:40,b:40}
 };
 
 // ---- Send response to Google Sheets ----
 function sendResponse(plotId, response) {
-  const url = 'https://script.google.com/macros/s/AKfycbwQKs6qYO_OD-rMhZZljH-C2hXnn5eAf9Bku7B2sjR5vkJKJCF_E6jjDFFgbv8GDzuo/exec'; // <-- Replace with your Google Apps Script Web App URL
+  const url = 'YOUR_WEB_APP_URL'; // <-- Replace with your Google Apps Script Web App URL
   const data = { plot: plotId, response: response };
   fetch(url, {
     method: 'POST',
@@ -62,39 +67,40 @@ function sendResponse(plotId, response) {
   .catch(err => console.error('Error sending response:', err));
 }
 
-// ---- Convert click position to ternary coordinates ----
+// ---- Convert click position to ternary coordinates (exact barycentric) ----
 function getTernaryFromClick(event, plotId) {
   const plot = document.getElementById(plotId);
   const rect = plot.getBoundingClientRect();
 
-  // Mouse position in plot area
+  // Click position
   const x = event.clientX - rect.left;
   const y = event.clientY - rect.top;
   const w = rect.width;
   const h = rect.height;
 
-  // normalize to [0,1]
-  const nx = x / w;
-  const ny = 1 - (y / h);
+  // Triangle vertices
+  const Ax = w * 0.1, Ay = h * 0.9;   // Social
+  const Bx = w * 0.9, By = h * 0.9;   // Physical
+  const Cx = w * 0.5, Cy = h * 0.1;   // Environmental
 
-  // simple barycentric approx
-  let a = nx;
-  let b = ny;
-  let c = 1 - (a + b);
+  // Barycentric math
+  const denom = ((By - Cy)*(Ax - Cx) + (Cx - Bx)*(Ay - Cy));
+  const alpha = ((By - Cy)*(x - Cx) + (Cx - Bx)*(y - Cy)) / denom;
+  const beta  = ((Cy - Ay)*(x - Cx) + (Ax - Cx)*(y - Cy)) / denom;
+  const gamma = 1 - alpha - beta;
 
-  if (c < 0) c = 0;
-  if (a < 0) a = 0;
-  if (b < 0) b = 0;
-
-  const sum = a+b+c;
-  return [ (a/sum)*100, (b/sum)*100, (c/sum)*100 ];
+  return [alpha*100, beta*100, gamma*100];
 }
 
 // ---- Render a blank plot, allow one response ----
 function renderPlot(plotId, storageKey){
-  const traces = []; // start empty
+  let traces = [makeTrace([], 'Your Response', 'red')];
+
   const userPoint = JSON.parse(localStorage.getItem(storageKey) || 'null');
-  if (userPoint) traces.push(makeTrace([userPoint],'Your Response','red'));
+  if (userPoint) {
+    traces = [makeTrace([userPoint],'Your Response','red')];
+  }
+
   Plotly.newPlot(plotId, traces, layout);
 
   let submitted = !!userPoint;
@@ -117,4 +123,6 @@ renderPlot('plot-2075', 'responseFuture');
 </script>
 </body>
 </html>
+
+
 
