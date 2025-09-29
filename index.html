@@ -1,9 +1,9 @@
-    <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ternary Plot Survey with Hover Labels</title>
+<title>Ternary Plot Survey</title>
 <script src="https://d3js.org/d3.v7.min.js"></script>
 <style>
   body { font-family: Arial, sans-serif; margin: 20px; }
@@ -31,14 +31,14 @@
 </div>
 
 <script>
-// ---- Configuration ----
+const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbyh1571bBjq1bmAwB1YpRvanrhpVoD440cdsjbaFwknL2jl1BiOaHanJZyxzti0SVE/exec'; // <-- Replace with your Apps Script Web App URL
 const plots = [
   {id:'plot-today', storage:'responseToday'},
   {id:'plot-2075', storage:'responseFuture'}
 ];
 const margin = {top:40,right:40,bottom:40,left:40};
 
-// ---- Helper Functions ----
+// ---- Helper functions ----
 function barycentricCoordinates(px, py, A, B, C){
     const det = (B[1]-C[1])*(A[0]-C[0]) + (C[0]-B[0])*(A[1]-C[1]);
     let alpha = ((B[1]-C[1])*(px-C[0]) + (C[0]-B[0])*(py-C[1])) / det;
@@ -50,16 +50,15 @@ function barycentricCoordinates(px, py, A, B, C){
 }
 
 function sendResponse(plotId, response){
-    const url = 'https://script.google.com/macros/s/AKfycbyfO5x1rNsoEje-99SjESORkz6MHcICfimjBr80QSXqc1_OkBEILihhVb-Dn5_zqhLp/exec'; // <-- replace with your Apps Script URL
-    fetch(url, {
+    fetch(WEB_APP_URL, {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({plot: plotId, response: response})
-    }).then(r=>r.text()).then(t=>console.log('Response sent', t))
+    }).then(r=>r.json()).then(t=>console.log('Sent:', t))
     .catch(err=>console.error(err));
 }
 
-// ---- Draw a single ternary plot ----
+// ---- Draw ternary plot ----
 function drawPlot(plotId, storageKey){
     const svg = d3.select(`#${plotId}`);
     const width = svg.node().clientWidth - margin.left - margin.right;
@@ -67,32 +66,27 @@ function drawPlot(plotId, storageKey){
 
     const g = svg.append("g").attr("transform", `translate(${margin.left},${margin.top})`);
 
-    // Equilateral triangle vertices
-    const A = [0, height];
-    const B = [width, height];
-    const C = [width/2, 0];
+    const A = [0, height], B = [width, height], C = [width/2, 0];
 
-    // Draw triangle
+    // Triangle
     g.append("polygon")
-      .attr("points", [A,B,C].map(d=>d.join(',')).join(' '))
+      .attr("points",[A,B,C].map(d=>d.join(',')).join(' '))
       .attr("fill","none")
       .attr("stroke","#333")
       .attr("stroke-width",2);
 
-    // Axis labels
+    // Labels
     g.append("text").text("Social").attr("x",A[0]-10).attr("y",A[1]+15).attr("text-anchor","end");
     g.append("text").text("Physical").attr("x",B[0]+10).attr("y",B[1]+15).attr("text-anchor","start");
     g.append("text").text("Environmental").attr("x",C[0]).attr("y",C[1]-10).attr("text-anchor","middle");
 
-    // Hover & response circles
     const hoverCircle = g.append("circle").attr("r",7).attr("fill","blue").attr("opacity",0.6).style("pointer-events","none");
     const hoverLabel = g.append("text").attr("class","hover-label").attr("x",0).attr("y",0).attr("opacity",0);
     let responseCircle = null;
 
     const stored = JSON.parse(localStorage.getItem(storageKey)||'null');
     if(stored){
-        responseCircle = g.append("circle")
-                          .attr("r",7).attr("fill","red")
+        responseCircle = g.append("circle").attr("r",7).attr("fill","red")
                           .attr("cx",A[0]*stored[0]/100 + B[0]*stored[1]/100 + C[0]*stored[2]/100)
                           .attr("cy",A[1]*stored[0]/100 + B[1]*stored[1]/100 + C[1]*stored[2]/100);
     }
@@ -129,14 +123,14 @@ function drawPlot(plotId, storageKey){
     });
 }
 
-// ---- Initialize both plots ----
+// Initialize both plots
 plots.forEach(p => drawPlot(p.id, p.storage));
-</script>
 
-</body>
-</html>
+</
+
 
    
+
 
 
 
